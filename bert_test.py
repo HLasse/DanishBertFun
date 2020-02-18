@@ -3,6 +3,7 @@ This us trying to finetune the Danish BotXO BERT
 
 oh and this is a proper docstring ;) 
 """
+from simpletransformers.ner import NERModel
 
 import torch
 import os 
@@ -20,9 +21,7 @@ from danlp.datasets import DDT
 import pyconll
 import re
 import unicodedata
-import loggin
 
-logger = logging.getLogger('simple_example')
 ######################################################
 # Loading Data
 ######################################################
@@ -56,7 +55,7 @@ for sentence in conllu_format:
 
 sents_str = [tokens_to_str(sent) for sent in sents]
 sents_str = [unicodedata.normalize('NFKD', unicode_str) for unicode_str in sents_str]
-sents_str = ["[CLS] " + sentence + " [SEP]" for sentence in sents_str]
+#sents_str = ["[CLS] " + sentence + " [SEP]" for sentence in sents_str]
 
 sents = [sentence.split(' ') for sentence in sents_str]
 
@@ -71,17 +70,22 @@ for sentence in conllu_format:
 
 ners = [ner_set_dict_to_str(ner) for ner in ners]
 
+len(set([y for x in ners for y in x]))
 
 ######################################################
 # figuring out BERT
 ######################################################
 tekst = "givet test tekst"
 
+
+# anden tokenizer
+#tokenizer = BertTokenizer.from_pretrained('bert-base-multilingual-uncased', do_lower_case=True)
+
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
 
-tokenizer.tokenize("jeg kan godt lide kaffe")
+tokenizer.tokenize("jeg kan godt lide kaffe her er flere ord vi kan kigge på sammenskudsgilde")
 
-tokenized_texts = [tokenizer.tokenize(sent) for sent in sentences]
+tokenized_texts = [tokenizer.tokenize(sent) for sent in sents_str]
 
 # Convert tokens to indexes
 with open("danish_bert_uncased/vocab.txt") as f:
@@ -178,4 +182,45 @@ def load_BFTC_from_TF_ckpt(bert_config, ckpt_path, num_labels):
 
 model = load_BFTC_from_TF_ckpt("danish_bert_uncased/config.json", "danish_bert_uncased/model.ckpt", num_labels = 18)
 
-model
+############################
+#Implementing big and nasty D's
+############################
+
+# # for the big D-classifier ;)
+# def start_d(sent):
+#     return [token[0].lower() == "d"  for token in sent]
+# true_class = [start_d(sent) for sent in tokenized_texts]
+
+conllu_format = ddt.load_as_conllu()
+L = [(i, token.form, token.misc.get("name").pop()) for i, sent in enumerate(conllu_format) for token in sent]
+df = pd.DataFrame(L, columns=['sentence_id', 'words', 'labels'])
+
+torch.save(model, "model.bin")
+train_data = [
+    [0, 'Simple', 'B-MISC'], [0, 'Transformers', 'I-MISC'], [0, 'started', 'O'], [1, 'with', 'O'], [0, 'text', 'O'], [0, 'classification', 'B-MISC'],
+    [1, 'Simple', 'B-MISC'], [1, 'Transformers', 'I-MISC'], [1, 'can', 'O'], [1, 'now', 'O'], [1, 'perform', 'O'], [1, 'NER', 'B-MISC']
+]
+train_df = pd.DataFrame(train_data, columns=['sentence_id', 'words', 'labels'])
+
+model = NERModel('bert', 'danish_bert_uncased_v2/', from_tf = True)
+model = NERModel('bert', 'danish_bert_uncased/', from_tf = False)
+
+
+model = BertForPreTraining.from_pretrained('danish_bert_uncased_v2/', from_tf=True)
+model = BertForTokenClassification('danish_bert_uncased_v2/', from_tf=True)
+
+
+# Værsgo Kenneth
+tokenized_texts = []
+mylabels = []
+for sent, tags in zip(sentences,labels):
+BERT_texts = []
+BERT_labels = np.array([])
+for word, tag in zip(sent.split(),tags):
+sub_words = tokenizer.wordpiece_tokenizer.tokenize(word)
+tags = np.array([tag for x in sub_words])
+tags[1:] = ‘X’
+BERT_texts += sub_words
+BERT_labels = np.append(BERT_labels,tags)
+mytexts.append(BERT_texts)
+mylabels.append(BERT_labels)
