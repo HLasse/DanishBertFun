@@ -27,68 +27,21 @@ import unicodedata
 ######################################################
 
 
-def tokens_to_str(token_list):
-    string = ' '.join(token_list)
-    # Removing whitespace in front of punctuation
-    string = re.sub(r'\s([?.!,](?:\s|$))', r'\1', string)
-    return string
-
-def ner_set_dict_to_str(ner_list):
-    lists = [list(dict_item) for dict_item in ner_list]
-    unlist = [y for x in lists for y in x]
-    return unlist
-
-
 ddt = DDT()
+
 conllu_format = ddt.load_as_conllu()
-
-
-# Extracting tokens
-sents = list()
-gold_tokens = list()
-for sentence in conllu_format:
-    tokens = list()
-    for token in sentence:
-        gold_tokens.append(token.form) 
-        tokens.append(token.form)
-    sents.append(tokens)
-
-sents_str = [tokens_to_str(sent) for sent in sents]
-sents_str = [unicodedata.normalize('NFKD', unicode_str) for unicode_str in sents_str]
-#sents_str = ["[CLS] " + sentence + " [SEP]" for sentence in sents_str]
-
-sents = [sentence.split(' ') for sentence in sents_str]
-
-
-# Extracting tags
-ners = list()
-for sentence in conllu_format:
-    ner = list()
-    for token in sentence:
-        ner.append(list(token.misc.values())[0])
-    ners.append(ner)
-
-ners = [ner_set_dict_to_str(ner) for ner in ners]
-
-len(set([y for x in ners for y in x]))
+L = [(i, token.form, token.misc.get("name").pop()) for i, sent in enumerate(conllu_format) for token in sent]
+df = pd.DataFrame(L, columns=['sentence_id', 'words', 'labels'])
 
 ######################################################
-# figuring out BERT
+# to bert tokens 
 ######################################################
-tekst = "givet test tekst"
-
-
-# anden tokenizer
-#tokenizer = BertTokenizer.from_pretrained('bert-base-multilingual-uncased', do_lower_case=True)
-
+sent_str = [sent.text for sent in conllu_format]
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
-
-tokenizer.tokenize("jeg kan godt lide kaffe her er flere ord vi kan kigge på sammenskudsgilde")
-
-tokenized_texts = [tokenizer.tokenize(sent) for sent in sents_str]
+tokenized_texts = [tokenizer.tokenize(sent) for sent in sent_str]
 
 # Convert tokens to indexes
-with open("danish_bert_uncased/vocab.txt") as f:
+with open("/home/au554730/Desktop/BERT_test/danish_bert_uncased/vocab.txt") as f:
     vocab = f.read()
 vocab = vocab.split("\n")
 vocab_d = {e: i for i, e in enumerate(vocab)}
@@ -96,13 +49,12 @@ vocab_d = {e: i for i, e in enumerate(vocab)}
 def sentence_to_idx(sent):
     return [vocab_d.get(token, vocab_d["[UNK]"]) for token in sent]
 
-
 input_ids = [sentence_to_idx(t) for t in tokenized_texts]
 
-MAX_LEN = 128
+max_len = 128
 
 # Padding
-input_ids = pad_sequences(input_ids, maxlen=MAX_LEN, dtype="long", truncating="post", padding="post")
+input_ids = pad_sequences(input_ids, maxlen=max_len, dtype="long", truncating="post", padding="post")
 
 # Create attention masks
 attention_masks = []
@@ -114,15 +66,10 @@ for seq in input_ids:
 
 
 ######################################################
-# finetuning BERT
-######################################################
-
-
-
-
-######################################################
 # loading model
 ######################################################
+
+df['ner']
 
 def load_BFTC_from_TF_ckpt(bert_config, ckpt_path, num_labels):
     """
@@ -180,7 +127,7 @@ def load_BFTC_from_TF_ckpt(bert_config, ckpt_path, num_labels):
                            model.__class__.__name__, "\n\t".join(error_msgs)))
     return model
 
-model = load_BFTC_from_TF_ckpt("danish_bert_uncased/config.json", "danish_bert_uncased/model.ckpt", num_labels = 18)
+model = load_BFTC_from_TF_ckpt("danish_bert_uncased/config.json", "danish_bert_uncased/model.ckpt", num_labels = )
 
 ############################
 #Implementing big and nasty D's
@@ -202,12 +149,11 @@ train_data = [
 ]
 train_df = pd.DataFrame(train_data, columns=['sentence_id', 'words', 'labels'])
 
-model = NERModel('bert', 'danish_bert_uncased_v2/', from_tf = True)
-model = NERModel('bert', 'danish_bert_uncased/', from_tf = False)
+model = NERModel('bert', '/home/au554730/Desktop/BERT_test/danish_bert_pytorch/', use_cuda = False)
 
+sub = df.head(100)
 
-model = BertForPreTraining.from_pretrained('danish_bert_uncased_v2/', from_tf=True)
-model = BertForTokenClassification('danish_bert_uncased_v2/', from_tf=True)
+model.train_model(sub)
 
 
 # Værsgo Kenneth
